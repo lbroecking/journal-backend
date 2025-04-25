@@ -1,11 +1,11 @@
-package main
+package models
 
 import (
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"journal-backend/logging"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -21,7 +21,7 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
-func loginHandler(c *gin.Context) {
+func LoginHandler(c *gin.Context) {
 	var req LoginRequest
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ungültige Daten"})
@@ -38,7 +38,7 @@ func loginHandler(c *gin.Context) {
 	url := fmt.Sprintf("%s/auth/v1/token?grant_type=password", supabaseURL)
 	supabaseReq, err := http.NewRequest("POST", url, bytes.NewReader(body))
 	if err != nil {
-		log.Println("Fehler beim Erstellen der Anfrage:", err)
+		logging.Log.Info("Fehler beim Erstellen der Anfrage:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "interner Fehler"})
 		return
 	}
@@ -48,7 +48,7 @@ func loginHandler(c *gin.Context) {
 
 	resp, err := http.DefaultClient.Do(supabaseReq)
 	if err != nil {
-		log.Println("Fehler beim Senden:", err)
+		logging.Log.Info("error while sending:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "interner Fehler"})
 		return
 	}
@@ -57,7 +57,7 @@ func loginHandler(c *gin.Context) {
 	respBody, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode != 200 {
-		log.Println("Supabase Login fehlgeschlagen:", string(respBody))
+		logging.Log.Info("Supabase Login fehlgeschlagen:", string(respBody))
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Login fehlgeschlagen"})
 		return
 	}
@@ -68,7 +68,7 @@ func loginHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, authData)
 }
 
-func registerHandler(c *gin.Context) {
+func RegisterHandler(c *gin.Context) {
 	var req LoginRequest
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ungültige Daten"})
@@ -84,7 +84,7 @@ func registerHandler(c *gin.Context) {
 	url := fmt.Sprintf("%s/auth/v1/signup", supabaseURL)
 	supabaseReq, err := http.NewRequest("POST", url, bytes.NewReader(body))
 	if err != nil {
-		log.Println("Fehler beim Erstellen der Anfrage:", err)
+		logging.Log.Info("Fehler beim Erstellen der Anfrage:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "interner Fehler"})
 		return
 	}
@@ -94,7 +94,7 @@ func registerHandler(c *gin.Context) {
 
 	resp, err := http.DefaultClient.Do(supabaseReq)
 	if err != nil {
-		log.Println("Fehler beim Senden:", err)
+		logging.Log.Info("Fehler beim Senden:", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "interner Fehler"})
 		return
 	}
@@ -103,8 +103,8 @@ func registerHandler(c *gin.Context) {
 	respBody, _ := io.ReadAll(resp.Body)
 
 	if resp.StatusCode >= 400 {
-		log.Println("Registrierung fehlgeschlagen:", string(respBody))
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Registrierung fehlgeschlagen"})
+		logging.Log.Info("registration failed:", string(respBody))
+		c.JSON(http.StatusBadRequest, gin.H{"error": "registration failed"})
 		return
 	}
 

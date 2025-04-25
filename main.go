@@ -1,51 +1,37 @@
 package main
 
 import (
-	"database/sql"
-	"log"
+	"journal-backend/db"
+	"journal-backend/logging"
+	"journal-backend/models"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
 
-type Profile struct {
-	ID int `json:"id"`
-	//UserID string `json:"user_id"`
-	Name string `json:"username"`
+var globalClient *db.Client
+
+type LoginRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
 }
 
 func main() {
-	connStr := "host=127.0.0.1 port=54322 user=postgres password=postgres dbname=postgres sslmode=disable"
-	db, err := sql.Open("postgres", connStr)
+	err := godotenv.Load()
 	if err != nil {
-		log.Fatal(err)
+		logging.Log.Fatal("Error loading .env-File")
 	}
-	defer db.Close()
 
+	logging.Log.Info("Connecting to API...")
 	router := gin.Default()
-	router.POST("/login", loginHandler)
-	router.POST("/register", registerHandler)
-
-	router.GET("/profiles", func(c *gin.Context) {
-		rows, err := db.Query("SELECT id, username FROM profiles")
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		defer rows.Close()
-
-		var profiles []Profile
-		for rows.Next() {
-			var p Profile
-			if err := rows.Scan(&p.ID, &p.Name); err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
-			profiles = append(profiles, p)
-		}
-		c.JSON(http.StatusOK, profiles)
-	})
+	router.GET("/profiles", models.TestUser)
+	router.POST("/register", models.RegisterHandler)
+	router.POST("/login", signInWithEmailPassword)
+	router.POST("/logout", logoutUser)
+	router.GET("/entries", getPersonalEntries)
 
 	router.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
@@ -53,4 +39,76 @@ func main() {
 	})
 
 	router.Run(":3000")
+}
+
+func signInWithEmailPassword(c *gin.Context) {
+	var req LoginRequest
+
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	url := os.Getenv("SUPABASE_URL")
+	apiKey := os.Getenv("SUPABASE_KEY")
+
+	dbClient, err := db.NewClient(url, apiKey, nil)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Error client initializing"})
+		return
+	}
+
+	session, err := dbClient.SignInWithEmailPassword(req.Email, req.Password)
+	dbClient.UserID = session.User.ID.String()
+	logging.Log.Info("User ID (uuid):", dbClient.UserID)
+	logging.Log.Info("User ID (uuid):", session.User.ID)
+
+	if err != nil {
+		c.JSON(401, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"message": "Login successful",
+		"session": session,
+	})
+
+	globalClient = dbClient
+
+}
+
+func logoutUser(c *gin.Context) {
+	logging.Log.Info("Received POST-Request; requested to Logout User")
+
+	err := globalClient.Auth.Logout()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err})
+		return
+	}
+	logging.Log.Info("User logged out")
+
+	globalClient.UserID = ""
+
+	c.JSON(200, "user logged out")
+
+}
+
+func getPersonalEntries(c *gin.Context) {
+
+	logging.Log.Info("Received GET-Request")
+
+	if globalClient.UserID == "" {
+		c.JSON(400, gin.H{"error": "user not logged in"})
+		return
+	}
+
+	logging.Log.Info("Selected username from URL")
+
+	personalEntries, err := models.PersonalEntries(*globalClient)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, personalEntries)
 }
