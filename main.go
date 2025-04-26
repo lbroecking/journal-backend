@@ -6,6 +6,7 @@ import (
 	"journal-backend/models"
 	"net/http"
 	"os"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -27,7 +28,7 @@ func main() {
 
 	logging.Log.Info("Connecting to API...")
 	router := gin.Default()
-	router.GET("/profiles", models.TestUser)
+	router.GET("/profiles", getAllUsers)
 	router.POST("/register", models.RegisterHandler)
 	router.POST("/login", signInWithEmailPassword)
 	router.POST("/logout", logoutUser)
@@ -93,18 +94,38 @@ func logoutUser(c *gin.Context) {
 
 }
 
-func getPersonalEntries(c *gin.Context) {
+func getAllUsers(c *gin.Context) {
+	logging.Log.Info("Received GET-Request for user entries")
 
-	logging.Log.Info("Received GET-Request")
-
-	if globalClient.UserID == "" {
+	if globalClient == nil || globalClient.UserID == "" {
 		c.JSON(400, gin.H{"error": "user not logged in"})
 		return
 	}
 
-	logging.Log.Info("Selected username from URL")
+	profiles, err := models.GetAllUsers(*globalClient)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
 
-	personalEntries, err := models.PersonalEntries(*globalClient)
+	logging.Log.Info("Selecting UserId + Name of all users stored in database was successful")
+	logging.Log.Info("Sended response to client.")
+	c.JSON(200, profiles)
+}
+
+func getPersonalEntries(c *gin.Context) {
+
+	logging.Log.Info("Received GET-Request for user entries")
+
+	if globalClient == nil || globalClient.UserID == "" {
+		c.JSON(400, gin.H{"error": "user not logged in"})
+		return
+	}
+
+	sSelectedIndex := c.Query("selected_index")
+	selectedIndex, _ := strconv.Atoi(sSelectedIndex)
+
+	personalEntries, err := models.FetchEntries(selectedIndex, *globalClient)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return

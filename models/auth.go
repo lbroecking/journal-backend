@@ -3,17 +3,12 @@ package models
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"journal-backend/logging"
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
-)
-
-const (
-	supabaseURL     = "https://bopabjxclatablmbnwia.supabase.co"
-	supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJvcGFianhjbGF0YWJsbWJud2lhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMxNjk1ODksImV4cCI6MjA1ODc0NTU4OX0.Idkx_4ehN72Y34NtMv0BUR9ZP3vYOekLd46LgRWGwoA"
 )
 
 type LoginRequest struct {
@@ -22,6 +17,9 @@ type LoginRequest struct {
 }
 
 func LoginHandler(c *gin.Context) {
+	url := os.Getenv("SUPABASE_URL")
+	apiKey := os.Getenv("SUPABASE_KEY")
+
 	var req LoginRequest
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ungültige Daten"})
@@ -35,7 +33,6 @@ func LoginHandler(c *gin.Context) {
 
 	body, _ := json.Marshal(payload)
 
-	url := fmt.Sprintf("%s/auth/v1/token?grant_type=password", supabaseURL)
 	supabaseReq, err := http.NewRequest("POST", url, bytes.NewReader(body))
 	if err != nil {
 		logging.Log.Info("Fehler beim Erstellen der Anfrage:", err)
@@ -43,7 +40,7 @@ func LoginHandler(c *gin.Context) {
 		return
 	}
 
-	supabaseReq.Header.Set("apikey", supabaseAnonKey)
+	supabaseReq.Header.Set("apikey", apiKey)
 	supabaseReq.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(supabaseReq)
@@ -69,6 +66,9 @@ func LoginHandler(c *gin.Context) {
 }
 
 func RegisterHandler(c *gin.Context) {
+	url := os.Getenv("SUPABASE_URL")
+	apiKey := os.Getenv("SUPABASE_KEY")
+
 	var req LoginRequest
 	if err := c.BindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "ungültige Daten"})
@@ -81,7 +81,6 @@ func RegisterHandler(c *gin.Context) {
 	}
 	body, _ := json.Marshal(payload)
 
-	url := fmt.Sprintf("%s/auth/v1/signup", supabaseURL)
 	supabaseReq, err := http.NewRequest("POST", url, bytes.NewReader(body))
 	if err != nil {
 		logging.Log.Info("Fehler beim Erstellen der Anfrage:", err)
@@ -89,7 +88,7 @@ func RegisterHandler(c *gin.Context) {
 		return
 	}
 
-	supabaseReq.Header.Set("apikey", supabaseAnonKey)
+	supabaseReq.Header.Set("apikey", apiKey)
 	supabaseReq.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(supabaseReq)

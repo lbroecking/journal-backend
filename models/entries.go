@@ -2,50 +2,26 @@ package models
 
 import (
 	"journal-backend/db"
-	"journal-backend/logging"
 )
 
+// wird gerade nicht genutzt, da entries als []map[string]interface{} zurückgegeben werden, ohne struct
 type JournalEntry struct {
-	ID              int    `json:"id"`
+	//ID              int    `json:"id"` //not really important for Frontend
 	Content         string `json:"content"`
 	ContentGrateful string `json:"content_grateful"`
 	ContentProud    string `json:"content_proud"`
 	EmotionColor    string `json:"emotion_color"`
 	CreatedAt       string `json:"created_at"`
 	Profiles        struct {
-		ID int `json:"id"`
+		ID int `json:"id"` //important for Frontend?
 		//UserID string `json:"user_id"`
 		Username string `json:"username"`
 	} `json:"profiles"`
 }
 
-func PersonalEntries(dbClient db.Client) ([]JournalEntry, error) {
-	//personalEntries aus DB lesen || GET
-	logging.Log.Info("Selecting entry-details from database...")
-	var entries []JournalEntry
-
-	logging.Log.Info(dbClient.UserID)
-	logging.Log.Info(entries)
-
-	selectFields := "id,content,content_grateful,content_proud,emotion_color,created_at,profiles(username)"
-	_, err := dbClient.From("journal_entries").
-		Select(selectFields, "", false).
-		Eq("user_id", dbClient.UserID).
-		ExecuteTo(&entries)
-
-	logging.Log.Info(entries)
-
-	if err != nil {
-		return nil, err
-	}
-
-	logging.Log.Info(entries)
-	return entries, nil
-
-}
-
-func FetchEntries(selectedIndex int, userID string, dbClient *db.Client) ([]map[string]interface{}, error) {
+func FetchEntries(selectedIndex int, dbClient db.Client) ([]map[string]interface{}, error) {
 	var table, selectFields string
+	var result []map[string]interface{}
 
 	switch selectedIndex {
 	case 0:
@@ -62,11 +38,10 @@ func FetchEntries(selectedIndex int, userID string, dbClient *db.Client) ([]map[
 		selectFields = "*"
 	}
 
-	var result []map[string]interface{}
 	_, err := dbClient.
 		From(table).
 		Select(selectFields, "", false).
-		Eq("user_id", userID).
+		Eq("user_id", dbClient.UserID).
 		ExecuteTo(&result)
 
 	if err != nil {
