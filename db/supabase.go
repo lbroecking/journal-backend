@@ -5,6 +5,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/supabase-community/functions-go"
 	"github.com/supabase-community/gotrue-go"
 	"github.com/supabase-community/gotrue-go/types"
@@ -27,7 +28,7 @@ type Client struct {
 	Auth      gotrue.Client
 	Functions *functions.Client
 	options   clientOptions
-	UserID    string
+	UserID    uuid.UUID
 }
 
 type clientOptions struct {
@@ -38,6 +39,26 @@ type clientOptions struct {
 type ClientOptions struct {
 	Headers map[string]string
 	Schema  string
+}
+
+type User struct {
+	ID                 string                    `json:"id"`
+	Aud                string                    `json:"aud"`
+	Role               string                    `json:"role"`
+	Email              string                    `json:"email"`
+	InvitedAt          time.Time                 `json:"invited_at"`
+	ConfirmedAt        time.Time                 `json:"confirmed_at"`
+	ConfirmationSentAt time.Time                 `json:"confirmation_sent_at"`
+	AppMetadata        struct{ provider string } `json:"app_metadata"`
+	UserMetadata       map[string]interface{}    `json:"user_metadata"`
+	CreatedAt          time.Time                 `json:"created_at"`
+	UpdatedAt          time.Time                 `json:"updated_at"`
+}
+
+type UserCredentials struct {
+	Email    string
+	Password string
+	Data     interface{}
 }
 
 // NewClient creates a new Supabase client.
@@ -93,6 +114,19 @@ func (c *Client) From(table string) *postgrest.QueryBuilder {
 // Rpc returns a string for the specified function.
 func (c *Client) Rpc(name, count string, rpcBody interface{}) string {
 	return c.rest.Rpc(name, count, rpcBody)
+}
+
+func (c *Client) SignUpWithEmailPassword(email, password string) (types.User, error) {
+	var req types.SignupRequest
+	req.Email = email
+	req.Password = password
+
+	res, err := c.Auth.Signup(req)
+	if err != nil {
+		return res.User, err
+	}
+
+	return res.User, nil
 }
 
 func (c *Client) SignInWithEmailPassword(email, password string) (types.Session, error) {

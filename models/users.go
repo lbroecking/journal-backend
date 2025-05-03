@@ -6,8 +6,8 @@ import (
 )
 
 type User struct {
-	ID     int    `json:"id"`
-	UserId string `json:"user_Id"`
+	//ID     int    `json:"id"`
+	UserId string `json:"user_id"`
 	Name   string `json:"username"`
 }
 
@@ -36,4 +36,24 @@ func GetAllUsers(dbClient db.Client) ([]map[string]interface{}, error) {
 	}
 
 	return result, nil
+}
+
+func NewUser(dbClient db.Client, user interface{}) error {
+
+	table := "profiles"
+
+	if dbClient.UserID.String() == "" {
+		logging.Log.Error("no user ID available in client")
+	}
+
+	_, _, err := dbClient.
+		From(table).
+		Insert(user, false, "", "*", "").
+		Execute()
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
