@@ -47,7 +47,7 @@ func main() {
 		c.Next()
 	})
 
-	router.Run(":3000")
+	router.Run(os.Getenv("SERVER_URL"))
 }
 
 func signUpWithEmailPassword(c *gin.Context) {
