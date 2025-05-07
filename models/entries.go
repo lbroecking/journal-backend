@@ -3,11 +3,12 @@ package models
 import (
 	"journal-backend/db"
 	"journal-backend/logging"
+	"strconv"
 )
 
 // wird gerade nicht genutzt, da entries als []map[string]interface{} zurückgegeben werden, ohne struct
 type JournalEntry struct {
-	//ID              int    `json:"id"` //not really important for Frontend
+	ID              int    `json:"id"` //not really important for Frontend
 	UserId          string `json:"user_id"`
 	Content         string `json:"content"`
 	ContentGrateful string `json:"content_grateful"`
@@ -23,13 +24,13 @@ func FetchEntries(selectedIndex int, dbClient db.Client) ([]map[string]interface
 	switch selectedIndex {
 	case 0:
 		table = "journal_entries"
-		selectFields = "content,content_grateful,content_proud,emotion_color,created_at"
+		selectFields = "id, content,content_grateful,content_proud,emotion_color,created_at"
 	case 1:
 		table = "moon_entries"
-		selectFields = "let_go,want,created_at,moon_sign"
+		selectFields = "id, let_go,want,created_at,moon_sign"
 	case 2:
 		table = "relationship_check"
-		selectFields = "question,answer,created_at"
+		selectFields = "id, question,answer,created_at"
 	default:
 		table = "journal_entries"
 		selectFields = "*"
@@ -59,6 +60,29 @@ func InsertPersonalEntry(dbClient db.Client, entry interface{}) error {
 		From(table).
 		Insert(entry, false, "", "*", "").
 		Eq("user_id", dbClient.UserID.String()).
+		Execute()
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func DeleteEntry(dbClient db.Client, table string, entryId int8) error {
+
+	if dbClient.UserID.String() == "" {
+		logging.Log.Error("no user ID available in client")
+	}
+
+	sID := strconv.FormatInt(int64(entryId), 10)
+	logging.Log.Debug("Delete from ", table, " where id= ", entryId)
+
+	_, _, err := dbClient.
+		From(table).
+		Delete("", "exact").
+		Single().
+		Eq("id", sID).
 		Execute()
 
 	if err != nil {

@@ -27,6 +27,11 @@ type RegisterRequest struct {
 	Username string `json:"username"`
 }
 
+type DeleteRequest struct {
+	Table string `json:"table"`
+	Id    int8   `json:"id"`
+}
+
 func main() {
 	err := godotenv.Load()
 	if err != nil {
@@ -41,6 +46,7 @@ func main() {
 	router.POST("/logout", logoutUser)
 	router.GET("/entries", getPersonalEntries)
 	router.POST("/entries", newPersonalEntry)
+	router.DELETE("/delete", deleteEntry)
 
 	router.Use(func(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
@@ -185,6 +191,35 @@ func newPersonalEntry(c *gin.Context) {
 	err := models.InsertPersonalEntry(*globalClient, req)
 	if err != nil {
 		logging.Log.Error("Error occured while inserting user entries: ", err.Error())
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, "OK")
+}
+
+func deleteEntry(c *gin.Context) {
+	logging.Log.Debug("Received DELETE-Request to delete one entry")
+
+	var req DeleteRequest
+
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	//Checking if User is logged in
+	if globalClient == nil || globalClient.UserID.String() == "" {
+		c.JSON(400, gin.H{"error": "user not logged in"})
+		logging.Log.Error("user not logged in")
+		return
+	}
+
+	logging.Log.Debug("Delete from ", req.Table, " where id= ", req.Id)
+
+	err := models.DeleteEntry(*globalClient, req.Table, req.Id)
+	if err != nil {
+		logging.Log.Error("Error occured while deleting entry: ", err.Error())
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
