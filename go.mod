@@ -42,9 +42,7 @@ require (
 )
 
 require (
-	github.com/fatih/structs v1.1.0
 	github.com/google/uuid v1.3.0
-	github.com/mitchellh/mapstructure v1.5.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/supabase-community/functions-go v0.1.0
 	github.com/supabase-community/gotrue-go v1.2.1

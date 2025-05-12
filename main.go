@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"journal-backend/db"
+	"journal-backend/helpers"
 	"journal-backend/logging"
 	"journal-backend/models"
 	"net/http"
@@ -52,6 +53,7 @@ func main() {
 	router.POST("/logout", logoutUser)
 	router.GET("/entries", getEntries)
 	router.POST("/entries", newEntry)
+	router.PUT("/entries", updateEntry)
 	router.DELETE("/delete", deleteEntry)
 
 	router.Use(func(c *gin.Context) {
@@ -213,7 +215,7 @@ func newEntry(c *gin.Context) {
 
 		persEntry.UserId = userID
 		persEntry.CreatedAt = createdAt
-		entry = toMap(persEntry)
+		entry = helpers.ToMap(persEntry)
 
 	case "moon_entries":
 		var moonEntry models.MoonEntry
@@ -225,7 +227,7 @@ func newEntry(c *gin.Context) {
 		}
 		moonEntry.UserId = userID
 		moonEntry.CreatedAt = createdAt
-		entry = toMap(moonEntry)
+		entry = helpers.ToMap(moonEntry)
 
 	case "relationship_check":
 		var relEntry models.RelationshipCheckEntry
@@ -237,7 +239,7 @@ func newEntry(c *gin.Context) {
 		}
 		relEntry.UserId = userID
 		relEntry.CreatedAt = createdAt
-		entry = toMap(relEntry)
+		entry = helpers.ToMap(relEntry)
 
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Unknown table"})
@@ -262,6 +264,89 @@ func checkUserAuth() bool {
 	}
 
 	return true
+}
+
+func updateEntry(c *gin.Context) {
+	logging.Log.Debug("Received POST-Request to insert new personal entry")
+
+	var raw map[string]interface{}
+	if err := c.BindJSON(&raw); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
+		return
+	}
+
+	table, ok := raw["table"].(string)
+	if !ok || table == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing or invalid 'table' key"})
+		return
+	}
+
+	if !checkUserAuth() {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not logged in"})
+		return
+	}
+
+	var err error
+	var entry map[string]any
+	var entryId int
+
+	userID := globalClient.UserID.String()
+
+	switch table {
+	case "journal_entries":
+		var persEntry models.PersonalEntry
+
+		jsonBytes, _ := json.Marshal(raw)
+		if err := json.Unmarshal(jsonBytes, &persEntry); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid journal entry structure"})
+			return
+		}
+
+		persEntry.UserId = userID
+		entryId = persEntry.EntryID
+
+		entry = helpers.ToMap(persEntry)
+
+	case "moon_entries":
+		var moonEntry models.MoonEntry
+
+		jsonBytes, _ := json.Marshal(raw)
+		if err := json.Unmarshal(jsonBytes, &moonEntry); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid moon entry structure"})
+			return
+		}
+		moonEntry.UserId = userID
+		entryId = moonEntry.EntryID
+
+		entry = helpers.ToMap(moonEntry)
+
+	case "relationship_check":
+		var relEntry models.RelationshipCheckEntry
+
+		jsonBytes, _ := json.Marshal(raw)
+		if err := json.Unmarshal(jsonBytes, &relEntry); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid relationship check structure"})
+			return
+		}
+		relEntry.UserId = userID
+		entryId = relEntry.EntryID
+
+		entry = helpers.ToMap(relEntry)
+
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Unknown table"})
+		return
+	}
+
+	logging.Log.Infof("Inserting entry into table '%s': %+v", table, entry)
+
+	if err = models.UpdateEntry(*globalClient, entry, table, entryId); err != nil {
+		logging.Log.Errorf("Error occurred while inserting user entry: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert entry"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success"})
 }
 
 func deleteEntry(c *gin.Context) {
@@ -317,20 +402,4 @@ func getEntries(c *gin.Context) {
 	logging.Log.Debug("Returned user entries")
 
 	c.JSON(200, entries)
-}
-
-func toMap(v interface{}) map[string]interface{} {
-	bytes, err := json.Marshal(v)
-	if err != nil {
-		logging.Log.Errorf("Failed to marshal struct: %v", err)
-		return nil
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(bytes, &result); err != nil {
-		logging.Log.Errorf("Failed to unmarshal into map: %v", err)
-		return nil
-	}
-
-	return result
 }

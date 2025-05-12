@@ -3,8 +3,11 @@ package models
 import (
 	"encoding/json"
 	"journal-backend/db"
+	"journal-backend/helpers"
 	"journal-backend/logging"
 	"strconv"
+
+	"github.com/supabase-community/postgrest-go"
 )
 
 // wird gerade nicht genutzt, da entries als []map[string]interface{} zurückgegeben werden, ohne struct
@@ -58,6 +61,7 @@ func FetchEntries(selectedIndex int, dbClient db.Client) ([]map[string]interface
 		From(table).
 		Select(selectFields, "", false).
 		Eq("user_id", dbClient.UserID.String()).
+		Order("created_at", &postgrest.OrderOpts{Ascending: false}).
 		ExecuteTo(&result)
 
 	if err != nil {
@@ -72,6 +76,27 @@ func InsertEntry(dbClient db.Client, entry interface{}, table string) error {
 	_, _, err := dbClient.
 		From(table).
 		Insert(entry, false, "", "*", "").
+		Eq("user_id", dbClient.UserID.String()).
+		Execute()
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func UpdateEntry(dbClient db.Client, entry map[string]interface{}, table string, entryId int) error {
+
+	sID := strconv.FormatInt(int64(entryId), 10)
+	logging.Log.Debug("Update entry in ", table, " where id= ", entryId)
+
+	filtered := helpers.FilterEmptyFields(entry)
+
+	_, _, err := dbClient.
+		From(table).
+		Update(filtered, "", "").
+		Eq("id", sID).
 		Eq("user_id", dbClient.UserID.String()).
 		Execute()
 

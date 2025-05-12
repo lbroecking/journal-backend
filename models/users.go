@@ -21,7 +21,7 @@ func GetAllUsers(dbClient db.Client) ([]map[string]interface{}, error) {
 	logging.Log.Info("Received GET-Request")
 	logging.Log.Info("Selecting UserId + username of all users stored in database...")
 
-	var result []map[string]interface{}
+	var result []map[string]any
 
 	selectFields := "username"
 	table := "profiles"
