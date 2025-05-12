@@ -1,20 +1,38 @@
 package models
 
 import (
+	"encoding/json"
 	"journal-backend/db"
 	"journal-backend/logging"
 	"strconv"
 )
 
 // wird gerade nicht genutzt, da entries als []map[string]interface{} zurückgegeben werden, ohne struct
-type JournalEntry struct {
-	ID              int    `json:"id"` //not really important for Frontend
+type PersonalEntry struct {
+	EntryID         int    `json:"id,omitempty"`
 	UserId          string `json:"user_id"`
 	Content         string `json:"content"`
 	ContentGrateful string `json:"content_grateful"`
 	ContentProud    string `json:"content_proud"`
 	EmotionColor    string `json:"emotion_color"`
 	CreatedAt       string `json:"created_at"`
+}
+
+type MoonEntry struct {
+	EntryID   int             `json:"id,omitempty"`
+	UserId    string          `json:"user_id"`
+	LetGo     json.RawMessage `json:"let_go"`
+	Want      json.RawMessage `json:"want"`
+	MoonSign  string          `json:"moon_sign"`
+	CreatedAt string          `json:"created_at"`
+}
+
+type RelationshipCheckEntry struct {
+	EntryID   int    `json:"id,omitempty"`
+	UserId    string `json:"user_id"`
+	Question  string `json:"question"`
+	Answer    string `json:"answer"`
+	CreatedAt string `json:"created_at"`
 }
 
 func FetchEntries(selectedIndex int, dbClient db.Client) ([]map[string]interface{}, error) {
@@ -49,12 +67,7 @@ func FetchEntries(selectedIndex int, dbClient db.Client) ([]map[string]interface
 	return result, nil
 }
 
-func InsertPersonalEntry(dbClient db.Client, entry interface{}) error {
-	table := "journal_entries"
-
-	if dbClient.UserID.String() == "" {
-		logging.Log.Error("no user ID available in client")
-	}
+func InsertEntry(dbClient db.Client, entry interface{}, table string) error {
 
 	_, _, err := dbClient.
 		From(table).
@@ -71,17 +84,12 @@ func InsertPersonalEntry(dbClient db.Client, entry interface{}) error {
 
 func DeleteEntry(dbClient db.Client, table string, entryId int8) error {
 
-	if dbClient.UserID.String() == "" {
-		logging.Log.Error("no user ID available in client")
-	}
-
 	sID := strconv.FormatInt(int64(entryId), 10)
 	logging.Log.Debug("Delete from ", table, " where id= ", entryId)
 
 	_, _, err := dbClient.
 		From(table).
 		Delete("", "exact").
-		Single().
 		Eq("id", sID).
 		Execute()
 

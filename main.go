@@ -1,12 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"journal-backend/db"
 	"journal-backend/logging"
 	"journal-backend/models"
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -32,6 +34,10 @@ type DeleteRequest struct {
 	Id    int8   `json:"id"`
 }
 
+type InsertEntry struct {
+	Table string `json:"table"`
+}
+
 func main() {
 	err := godotenv.Load()
 	if err != nil {
@@ -44,8 +50,8 @@ func main() {
 	router.POST("/register", signUpWithEmailPassword)
 	router.POST("/login", signInWithEmailPassword)
 	router.POST("/logout", logoutUser)
-	router.GET("/entries", getPersonalEntries)
-	router.POST("/entries", newPersonalEntry)
+	router.GET("/entries", getEntries)
+	router.POST("/entries", newEntry)
 	router.DELETE("/delete", deleteEntry)
 
 	router.Use(func(c *gin.Context) {
@@ -153,7 +159,7 @@ func logoutUser(c *gin.Context) {
 func getAllUsers(c *gin.Context) {
 	logging.Log.Info("Received GET-Request for user entries")
 
-	if globalClient == nil || globalClient.UserID.String() == "" {
+	if !checkUserAuth() {
 		c.JSON(400, gin.H{"error": "user not logged in"})
 		return
 	}
@@ -169,33 +175,93 @@ func getAllUsers(c *gin.Context) {
 	c.JSON(200, profiles)
 }
 
-func newPersonalEntry(c *gin.Context) {
+func newEntry(c *gin.Context) {
 	logging.Log.Debug("Received POST-Request to insert new personal entry")
 
-	var req models.JournalEntry
-
-	if err := c.BindJSON(&req); err != nil {
-		c.JSON(400, gin.H{"error": "Invalid request body"})
+	var raw map[string]interface{}
+	if err := c.BindJSON(&raw); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
-	//Checking if User is logged in
+	table, ok := raw["table"].(string)
+	if !ok || table == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Missing or invalid 'table' key"})
+		return
+	}
+
+	if !checkUserAuth() {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not logged in"})
+		return
+	}
+
+	var err error
+	var entry map[string]any
+
+	userID := globalClient.UserID.String()
+	createdAt := time.Now().Format("2006-01-02")
+
+	switch table {
+	case "journal_entries":
+		var persEntry models.PersonalEntry
+
+		jsonBytes, _ := json.Marshal(raw)
+		if err := json.Unmarshal(jsonBytes, &persEntry); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid journal entry structure"})
+			return
+		}
+
+		persEntry.UserId = userID
+		persEntry.CreatedAt = createdAt
+		entry = toMap(persEntry)
+
+	case "moon_entries":
+		var moonEntry models.MoonEntry
+
+		jsonBytes, _ := json.Marshal(raw)
+		if err := json.Unmarshal(jsonBytes, &moonEntry); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid moon entry structure"})
+			return
+		}
+		moonEntry.UserId = userID
+		moonEntry.CreatedAt = createdAt
+		entry = toMap(moonEntry)
+
+	case "relationship_check":
+		var relEntry models.RelationshipCheckEntry
+
+		jsonBytes, _ := json.Marshal(raw)
+		if err := json.Unmarshal(jsonBytes, &relEntry); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid relationship check structure"})
+			return
+		}
+		relEntry.UserId = userID
+		relEntry.CreatedAt = createdAt
+		entry = toMap(relEntry)
+
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Unknown table"})
+		return
+	}
+
+	logging.Log.Infof("Inserting entry into table '%s': %+v", table, entry)
+
+	if err = models.InsertEntry(*globalClient, entry, table); err != nil {
+		logging.Log.Errorf("Error occurred while inserting user entry: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to insert entry"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "success"})
+}
+
+func checkUserAuth() bool {
 	if globalClient == nil || globalClient.UserID.String() == "" {
-		c.JSON(400, gin.H{"error": "user not logged in"})
 		logging.Log.Error("user not logged in")
-		return
+		return false
 	}
 
-	req.UserId = globalClient.UserID.String()
-
-	err := models.InsertPersonalEntry(*globalClient, req)
-	if err != nil {
-		logging.Log.Error("Error occured while inserting user entries: ", err.Error())
-		c.JSON(500, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(200, "OK")
+	return true
 }
 
 func deleteEntry(c *gin.Context) {
@@ -209,9 +275,8 @@ func deleteEntry(c *gin.Context) {
 	}
 
 	//Checking if User is logged in
-	if globalClient == nil || globalClient.UserID.String() == "" {
+	if !checkUserAuth() {
 		c.JSON(400, gin.H{"error": "user not logged in"})
-		logging.Log.Error("user not logged in")
 		return
 	}
 
@@ -230,19 +295,18 @@ func deleteEntry(c *gin.Context) {
 /*
 TODO commenting
 */
-func getPersonalEntries(c *gin.Context) {
+func getEntries(c *gin.Context) {
 	logging.Log.Debug("Received GET-Request for user entries")
 
-	if globalClient == nil || globalClient.UserID.String() == "" {
+	if !checkUserAuth() {
 		c.JSON(400, gin.H{"error": "user not logged in"})
-		logging.Log.Error("user not logged in")
 		return
 	}
 
 	sSelectedIndex := c.Query("selected_index")
 	selectedIndex, _ := strconv.Atoi(sSelectedIndex)
 
-	personalEntries, err := models.FetchEntries(selectedIndex, *globalClient)
+	entries, err := models.FetchEntries(selectedIndex, *globalClient)
 	if err != nil {
 		logging.Log.Debug("Error occured while fetching user entries")
 		c.JSON(500, gin.H{"error": err.Error()})
@@ -252,5 +316,21 @@ func getPersonalEntries(c *gin.Context) {
 
 	logging.Log.Debug("Returned user entries")
 
-	c.JSON(200, personalEntries)
+	c.JSON(200, entries)
+}
+
+func toMap(v interface{}) map[string]interface{} {
+	bytes, err := json.Marshal(v)
+	if err != nil {
+		logging.Log.Errorf("Failed to marshal struct: %v", err)
+		return nil
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(bytes, &result); err != nil {
+		logging.Log.Errorf("Failed to unmarshal into map: %v", err)
+		return nil
+	}
+
+	return result
 }
