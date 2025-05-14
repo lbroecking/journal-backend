@@ -140,6 +140,12 @@ func signInWithEmailPassword(c *gin.Context) {
 
 	globalClient = dbClient
 
+	if err := helpers.ClearOldLetGoEntries(*globalClient); err != nil {
+		logging.Log.Error("Error cleaning up old let_go entries: ", err)
+	} else {
+		logging.Log.Info("Successfully cleaned up old let_go entries.")
+	}
+
 }
 
 func logoutUser(c *gin.Context) {

@@ -3,7 +3,9 @@ package helpers
 import (
 	"encoding/json"
 	"fmt"
+	"journal-backend/db"
 	"journal-backend/logging"
+	"time"
 )
 
 func ToMap(v interface{}) map[string]interface{} {
@@ -53,4 +55,20 @@ func FilterEmptyFields(input map[string]interface{}) map[string]interface{} {
 		}
 	}
 	return clean
+}
+
+func ClearOldLetGoEntries(dbClient db.Client) error {
+	// Berechne den Zeitpunkt, der 24 Stunden in der Vergangenheit liegt
+	filterTime := time.Now().Add(-24 * time.Hour).Format("2006-01-02 15:04:05")
+
+	// Führe das UPDATE aus: Setze `let_go` auf NULL für Einträge, die älter als 24 Stunden sind
+	_, _, err := dbClient.
+		From("moon_entries").
+		Update(map[string]interface{}{"let_go": nil}, "", "").
+		Gt("created_at", "1970-01-01"). // optional, um sicherzustellen, dass `created_at` gültig ist
+		Lt("created_at", filterTime).   // Einträge älter als 24 Stunden
+		Not("let_go", "is", "NULL").    // nur Einträge mit nicht-NULL `let_go`
+		Execute()
+
+	return err
 }
